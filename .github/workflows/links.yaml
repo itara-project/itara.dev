@@ -1,0 +1,62 @@
+# Build the example site and check links with Lychee.
+# cSpell:ignore lycheeverse
+
+name: links
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Regenerate generated files (drift-check input)
+        run: npm run update:docsy:pack
+
+      - name: Guard the npm-script posture
+        run: node --test tests/npm-scripts.test.mjs
+
+      - name: Install lychee
+        env:
+          LYCHEE_VERSION: v0.24.2
+        run: |
+          tmp="$(mktemp -d)"
+          curl -sfL "https://github.com/lycheeverse/lychee/releases/download/lychee-${LYCHEE_VERSION}/lychee-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "$tmp"
+          install -D "$(find "$tmp" -type f -name lychee | head -n1)" "$HOME/.local/bin/lychee"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Check links
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run check:links
+
+      - name: 'Drift check: committed generated files are unchanged'
+        run: |
+          npm run -s _is:clean || {
+            echo
+            echo 'ERROR: generated files changed; regenerate locally and commit:'
+            echo '  .lycheecache               -> npm run check:links'
+            echo '  package-lock, hugoautogen  -> npm run update:docsy:pack'
+            echo
+            exit 1
+          }
