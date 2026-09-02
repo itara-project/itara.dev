@@ -1,0 +1,88 @@
+{
+  "name": "itara-dev-site",
+  "version": "0.1.0",
+  "description": "Documentation site for Itara.",
+  "repository": "github:itara-project/itara.dev",
+  "homepage": "https://itara.dev",
+  "author": "Gábor Kiss",
+  "license": "Apache-2.0",
+  "bugs": "https://github.com/itara-project/itara.dev/issues",
+  "spelling": "cSpell:ignore itara docsy hugo rtlcss -",
+  "workspaces": [
+    "packages/hugoautogen"
+  ],
+  "scripts": {
+    "_build": "npm run _hugo-dev --",
+    "_check:format": "prettier --check .",
+    "_check:links": "lychee-norm-cache",
+    "_commit:public": "HASH=$(git rev-parse --short main); cd public && git add -A && git commit --allow-empty -m \"Site at $HASH\"",
+    "_diff:check": "git diff --name-only --exit-code",
+    "_get:docsy": "hugo mod get github.com/google/docsy/theme@v$npm_package_version",
+    "_hugo-dev": "npm run _hugo -- -e dev --logLevel info -DFE",
+    "_hugo": "hugo --cleanDestinationDir",
+    "_is:clean": "bash -c 'o=$(git status --porcelain -uall) && { echo \"$o\"; [ -z \"$o\" ]; }'",
+    "_local": "cross-env HUGO_MODULE_WORKSPACE=docsy.work",
+    "_netlify:prepare": "npm run -s _is:clean && npm run install:safe && npm run -s _is:clean",
+    "_serve": "npm run _hugo-dev -- --minify serve --renderToMemory",
+    "_update:docsy:post": "hugo mod tidy && npm run update:docsy:pack",
+    "approve:hugo": "npm approve-scripts hugo-extended && npm run update:docsy:pack",
+    "build:preview": "npm run _hugo-dev -- --minify --baseURL \"${DEPLOY_PRIME_URL:-/}\"",
+    "build:production": "npm run _hugo -- --minify",
+    "build": "npm run _build -- ",
+    "check:links:internal": "npm run build && npm run _check:links -- --offline",
+    "check:links": "npm run build && npm run _check:links",
+    "ci:prepare": "npm run _get:docsy && hugo mod graph && hugo mod tidy",
+    "ci:test": "npm run ci:prepare && npm run fix:format && npm run test && npm run _diff:check",
+    "clean": "rm -Rf public/* resources",
+    "fix:format:diff": "npm run fix:format",
+    "fix:format": "npm run _check:format -- --write",
+    "fix": "npm run fix:format",
+    "install:safe": "npm ci --ignore-scripts",
+    "local": "npm run _local -- npm run",
+    "make:public": "git init -b main public",
+    "seq": "bash -c 'for cmd in \"$@\"; do npm run $cmd || exit 1; done' - ",
+    "serve": "npm run _serve",
+    "test-and-fix": "npm run fix && npm run test-only",
+    "test-only": "npm run check:links && npm run test:site",
+    "test:site": "node --test 'tests/**/*.test.mjs'",
+    "test": "npm run test-and-fix",
+    "update:docsy:main": "hugo mod get -u github.com/google/docsy/theme@main && npm run _update:docsy:post",
+    "update:docsy:mod": "hugo mod get -u github.com/google/docsy/theme && npm run _update:docsy:post",
+    "update:docsy:pack": "hugo mod npm pack && npm pkg set 'name=\"@docsy/hugoautogen\"' private=true --json --prefix packages/hugoautogen && npm install --ignore-scripts",
+    "update:hugo": "npm install --save-dev --save-exact --ignore-scripts hugo-extended@latest",
+    "update:main": "npm run update:packages && npm run update:docsy:main",
+    "update:packages": "npm-check-updates -u -x hugo-extended",
+    "update": "npm run update:packages && npm run update:docsy:mod"
+  },
+  "devDependencies": {
+    "autoprefixer": "10.5.4",
+    "cross-env": "10.1.0",
+    "hugo-extended": "^0.164.0",
+    "link-cache": "0.3.0",
+    "postcss-cli": "11.0.1",
+    "rtlcss": "4.3.0",
+    "sass-embedded": "1.102.0"
+  },
+  "optionalDependencies": {
+    "npm-check-updates": "23.0.2",
+    "prettier": "3.9.6"
+  },
+  "overrides": {
+    "adm-zip": "0.6.0"
+  },
+  "engines": {
+    "node": ">=24",
+    "npm": ">=11.16.0"
+  },
+  "allowScripts": {
+    "@parcel/watcher": false,
+    "fsevents": false,
+    "hugo-extended@0.164.0": true
+  },
+  "private": true,
+  "prettier": {
+    "proseWrap": "always",
+    "singleQuote": true
+  },
+  "cSpell:ignore": ""
+}
