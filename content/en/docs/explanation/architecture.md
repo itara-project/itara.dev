@@ -6,7 +6,7 @@ weight: 2
  
 This page describes how Itara actually works today — the module
 structure, the layering rules, what happens at startup, and what happens
-on a call. For where this is going, see [Vision](../vision/). For the
+on a call. For where this is going, see [Vision](/docs/explanation/vision/). For the
 formal, normative behavior every implementation must satisfy, see the
 [wiring configuration](/docs/reference/wiring-configuration/) and
 [metadata format](/docs/reference/metadata-format/) references.
