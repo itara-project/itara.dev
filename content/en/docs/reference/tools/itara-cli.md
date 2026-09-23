@@ -79,12 +79,12 @@ or similar; it's plain text.
 **Nodes** — every node in the (possibly `--node`-filtered) config, one per
 line, with its kind-specific detail (`component: <id>` or
 `virtual: <contract> @ <address>`). A node with at least one external
-inbound connection (a connection with no `from`) is marked
+inbound connection (a connection with no `caller` block) is marked
 `(external entry point)`.
  
 **Connections** — every *internal* connection (i.e. connections with a
-non-empty `from` — external inbound connections are omitted from this list
-since they have no interesting `from → to` shape to show), as
+non-empty `caller` block — external inbound connections are omitted from
+this list since they have no interesting `from → to` shape to show), as
 `<id>: <from> → <to> [<transport-id>]`.
  
 **Deployment groups (derived)** — component nodes joined by one or more
@@ -172,8 +172,8 @@ nodes:
  
 connections:
   - id: "external-to-order"
-    from:
-    to: "orderNode"
+    callee:
+      nodeId: "orderNode"
     transport:
       id: http
       params:
@@ -182,8 +182,8 @@ connections:
     serializer:
       id: "json"
   - id: "external-to-inventory"
-    from:
-    to: "inventoryNode"
+    callee:
+      nodeId: "inventoryNode"
     transport:
       id: http
       params:
@@ -192,18 +192,24 @@ connections:
     serializer:
       id: "json"
   - id: "order-to-inventory"
-    from: "orderNode"
-    to: "inventoryNode"
+    caller:
+      nodeId: "orderNode"
+    callee:
+      nodeId: "inventoryNode"
     transport:
       id: direct
   - id: "order-to-fulfilment"
-    from: "orderNode"
-    to: "fulfilmentNode"
+    caller:
+      nodeId: "orderNode"
+    callee:
+      nodeId: "fulfilmentNode"
     transport:
       id: direct
   - id: "order-to-payment"
-    from: "orderNode"
-    to: "paymentNode"
+    caller:
+      nodeId: "orderNode"
+    callee:
+      nodeId: "paymentNode"
     transport:
       id: http
       handleTimeout: true
@@ -220,8 +226,10 @@ connections:
         waitDuration: 500ms
         retryRuntime: "true"
   - id: "order-to-orderReserved"
-    from: "orderNode"
-    to: orderReservedChannel
+    caller:
+      nodeId: "orderNode"
+    callee:
+      nodeId: orderReservedChannel
     transport:
       id: kafka
       params:
@@ -229,8 +237,10 @@ connections:
     serializer:
       id: "json"
   - id: "order-to-orderFulfilled"
-    from: "orderNode"
-    to: orderFulfilledChannel
+    caller:
+      nodeId: "orderNode"
+    callee:
+      nodeId: orderFulfilledChannel
     transport:
       id: kafka
       params:
@@ -238,8 +248,10 @@ connections:
     serializer:
       id: "json"
   - id: "order-to-orderCancelled"
-    from: "orderNode"
-    to: orderCancelledChannel
+    caller:
+      nodeId: "orderNode"
+    callee:
+      nodeId: orderCancelledChannel
     transport:
       id: kafka
       params:
@@ -247,8 +259,10 @@ connections:
     serializer:
       id: "json"
   - id: "orderReserved-to-notification"
-    from: "orderReservedChannel"
-    to: "notificationNode"
+    caller:
+      nodeId: "orderReservedChannel"
+    callee:
+      nodeId: "notificationNode"
     transport:
       id: kafka
       params:
@@ -257,8 +271,10 @@ connections:
     serializer:
       id: "json"
   - id: "orderFulfilled-to-notification"
-    from: "orderFulfilledChannel"
-    to: "notificationNode"
+    caller:
+      nodeId: "orderFulfilledChannel"
+    callee:
+      nodeId: "notificationNode"
     transport:
       id: kafka
       params:
@@ -267,8 +283,10 @@ connections:
     serializer:
       id: "json"
   - id: "orderCancelled-to-notification"
-    from: "orderCancelledChannel"
-    to: "notificationNode"
+    caller:
+      nodeId: "orderCancelledChannel"
+    callee:
+      nodeIdto: "notificationNode"
     transport:
       id: kafka
       params:
@@ -387,11 +405,11 @@ by argument parsing itself.
 |---|---|---|---|
 | `duplicate-ids` | Error | No | The same node `id` declared more than once. |
 | `connection-id-uniqueness` | Error | No | The same connection `id` declared more than once. |
-| `self-connections` | Error | No | A connection whose `from` and `to` are the same node. |
-| `direct-external-conflict` | Error | No | A connection using the `direct` transport with no `from` — a direct call is in-process and can't have an external caller. |
+| `self-connections` | Error | No | A connection whose `caller.nodeId` and `callee.nodeId` are the same node. |
+| `direct-external-conflict` | Error | No | A connection using the `direct` transport with no `caller` block — a direct call is in-process and can't have an external caller. |
 | `outbound-ambiguity` | Error | No | A node with outbound connections to two or more different node ids that all resolve to the *same* component — the agent would have no way to pick one at dispatch time. |
-| `orphaned-nodes` | Error | No | A node declared in `nodes` that no connection (as either `from` or `to`) ever references. |
-| `orphaned-connections` | Error | No | A connection whose `from` or `to` references a node id that isn't declared in `nodes`. |
+| `orphaned-nodes` | Error | No | A node declared in `nodes` that no connection (as either `caller` or `callee`) ever references. |
+| `orphaned-connections` | Error | No | A connection whose `caller` or `callee` references a node id that isn't declared in `nodes`. |
 | `virtual-no-producers` | Warning | No | A virtual node with no inbound connection — nothing will ever publish to it. |
 | `virtual-no-consumers` | Warning | No | A virtual node with no outbound connection — nothing will ever consume from it. |
 | `virtual-transport-mismatch` | Warning | No | A virtual node whose inbound/outbound connections don't all agree on the same transport type. |
