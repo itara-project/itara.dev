@@ -22,8 +22,10 @@ nodes:
  
 connections:
   - id: "gateway-to-calculator"
-    from: "gatewayNode"
-    to: "calculatorNode"
+    caller:
+      nodeId: "gatewayNode"
+    callee:
+      nodeId: "calculatorNode"
     transport:
       id: http
       params:
@@ -91,7 +93,7 @@ nodes:
  
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `id` | string | **Yes** | This node's own identifier. Must be unique, non-blank and match the [id character set](#id-character-set). Used elsewhere in the file (`connections[].from` / `connections[].to`) to refer to this node. |
+| `id` | string | **Yes** | This node's own identifier. Must be unique, non-blank and match the [id character set](#id-character-set). Used elsewhere in the file (`connections[].caller.nodeId` / `connections[].callee.nodeId`) to refer to this node. |
 | `kind` | string: `component` \| `virtual` | No — defaults to `component` | Discriminates which node type this is. Case-insensitive (`Component`, `VIRTUAL`, etc. are all accepted and normalized). A config without a `kind` field is a config full of component nodes. |
  
 ### Component nodes (`kind: component`)
@@ -136,8 +138,23 @@ caller reaches into the topology.
 ```yaml
 connections:
   - id: "gateway-to-calculator"
-    from: "gatewayNode"
-    to: "calculatorNode"
+    caller:
+      nodeId: "gatewayNode"
+      failureSemantics:
+        id: built-in
+        timeout: 2s
+        handleTimeout: true
+        absoluteTimeout: 10s
+        maxRetry: 3
+        params:
+          waitDuration: 500ms
+    callee:
+      nodeId: "calculatorNode"
+      authorization:
+        id: rule-table
+        params:
+          allow: "shout"
+          deny: "whisper"
     transport:
       id: http
       handleTimeout: true
@@ -148,39 +165,24 @@ connections:
       id: json
       params:
         schemaRegistryUrl: "${SCHEMA_REGISTRY_URL:-http://localhost:8081}"
-    failureSemantics:
-      id: built-in
-      timeout: 2s
-      handleTimeout: true
-      absoluteTimeout: 10s
-      maxRetry: 3
-      params:
-        waitDuration: 500ms
     authentication:
       id: shared-secret
       params:
         secret: "${GATEWAY_SECRET}"
-    authorization:
-      id: rule-table
-      params:
-        allow: "shout"
-        deny: "whisper"
 ```
  
 ### Top-level connection fields
  
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `id` | string | **Yes** | This connection's own identifier — distinct from `from`/`to`, which identify *nodes*. Must be unique across the entire wiring configuration, not just per-node. Same [character set](#id-character-set) as node ids. |
-| `from` | string | No | The calling node's id. Absent, `null`, or blank means the caller is external to the Itara topology — this connection defines an inbound entry point for `to`. |
-| `to` | string | **Yes** | The called node's id. |
-| `transport` | [TransportEntry](#transport-block) | **Yes** | The transport this connection uses. |
-| `serializer` | [SerializerEntry](#serializer-block) | Conditionally — see below | The serializer this connection uses. Required for every connection except direct (colocated) ones. |
-| `failureSemantics` | [FailureSemanticsEntry](#failuresemantics-block) | No | Retry, timeout, and circuit-breaking policy for this connection. Absent means the noop implementation is used — no retries, no enforced timeout, no circuit breaking. |
-| `authentication` | [AuthenticationEntry](#authentication-block) | No | Authentication mechanism for this connection. Absent means the noop implementation is used. |
-| `authorization` | [AuthorizationEntry](#authorization-block) | No | Authorization mechanism for this connection. Absent means the noop implementation is used. |
+| `id` | string | **Yes** | This connection's own identifier — distinct from the node references inside `caller`/`callee`. Must be unique across the entire wiring configuration. Same [character set](#id-character-set) as node ids. |
+| `callee` | [Callee block](#caller-and-callee-blocks) | **Yes** | The called node (`callee.nodeId`), and optionally callee-side plugin configuration. |
+| `caller` | [Caller block](#caller-and-callee-blocks) | No | The calling node (`caller.nodeId`), and optionally caller-side plugin configuration. Absent means the caller is external to the Itara topology. |
+| `transport` | [TransportEntry](#transport-block) | **Yes**, resolvable at connection-level or per-side | The transport this connection uses. |
+| `serializer` | [SerializerEntry](#serializer-block) | Conditionally — see below | The serializer this connection uses. Required for every connection except direct ones; resolvable at connection-level or per-side. |
+| `authentication` | [AuthenticationEntry](#authentication-block) | No | Authentication mechanism. Valid at connection-level, caller-side, or callee-side. Absent means noop. |
  
-A connection with `from` absent/blank is an **external** connection — it
+A connection with no `caller` block is an **external** connection — it
 represents traffic entering the topology from outside (e.g. a public HTTP
 endpoint), rather than a call between two nodes both managed by Itara.
  
@@ -190,8 +192,43 @@ never cross a process boundary, so nothing on them is ever serialized, and
 they don't require a `serializer` block. A direct connection cannot be
 external — an in-process call has no meaning without a caller also managed
 by Itara.
+
+### Caller and callee blocks
+
+```````yaml
+callee:
+  nodeId: "calculatorNode"
+  authorization:
+    id: rule-table
+    params: { allow: "shout", deny: "whisper" }
+
+caller:
+  nodeId: "gatewayNode"
+  failureSemantics:
+    id: built-in
+    maxRetry: 3
+```````
+
+Each block may additionally hold `transport`, `serializer`, and
+`authentication` configuration, independent of the connection level.
+`failureSemantics` is valid on `caller` only; `authorization` is valid on
+`callee` only.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `nodeId` | string | **Yes** within its block | The node this side refers to. |
+
+Override happens per plugin kind, not per side as a whole — a `caller`
+block overriding just `transport` while `serializer` still falls back to
+connection-level is valid. Where a side-specific declaration for a given
+plugin kind is present, it replaces the connection-level declaration of
+that kind for that side entirely — block-level, not field-level; nothing
+merges.
  
 ### Transport block
+
+Valid at connection-level, caller-side, or callee-side (see
+[Caller and callee blocks](#caller-and-callee-blocks)).
  
 ```yaml
 transport:
@@ -209,6 +246,8 @@ transport:
 | `params` | map of string → scalar | No — defaults to `{}` | Transport-specific connection parameters, passed through to the transport implementation as-is. The wiring config has no schema for this map and no knowledge of what any particular transport expects. Values must be scalars (string, number, or boolean); nested maps or lists are not valid here. |
  
 ### Serializer block
+
+Valid at connection-level, caller-side, or callee-side.
  
 ```yaml
 serializer:
@@ -227,6 +266,9 @@ except direct ones — there is no serializer choice that's safe to assume
 silently for a connection that crosses a process boundary.
  
 ### failureSemantics block
+
+Valid on the `caller` block only — retry/timeout is exclusively the
+caller's concern.
  
 ```yaml
 failureSemantics:
@@ -253,6 +295,8 @@ implementation is used — no retries, no timeout enforcement, no circuit
 breaking.
  
 ### authentication block
+
+Valid at connection-level, caller-side, or callee-side.
  
 ```yaml
 authentication:
@@ -267,6 +311,9 @@ authentication:
 | `params` | map of string → scalar | No — defaults to `{}` | Implementation-specific parameters, passed through as-is. |
  
 ### authorization block
+
+Valid on the `callee` block only — authorization is exclusively the
+callee's own access-control decision.
  
 ```yaml
 authorization:
@@ -297,14 +344,17 @@ nodes:
 connections:
   # In-process call — order-service calls pricing-service directly.
   - id: "order-to-pricing"
-    from: "order-service-node"
-    to: "pricing-service-node"
+    caller:
+      nodeId: "order-service-node"
+    callee:
+      nodeId: "pricing-service-node"
     transport:
       id: direct
  
-  # Inbound HTTP entry point — no 'from', so the caller is external.
+  # Inbound HTTP entry point — no 'caller' block, so the caller is external.
   - id: "gateway-to-order"
-    to: "order-service-node"
+    callee:
+      nodeId: "order-service-node"
     transport:
       id: http
       params:
@@ -319,8 +369,10 @@ connections:
  
   # order-service publishes onto a virtual (broker-backed) channel.
   - id: "order-to-order-placed-channel"
-    from: "order-service-node"
-    to: "orderPlacedChannel"
+    caller:
+      nodeId: "order-service-node"
+    caller:
+      nodeId: "orderPlacedChannel"
     transport:
       id: kafka
       params:
